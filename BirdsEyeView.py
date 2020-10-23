@@ -8,16 +8,16 @@ from copy import copy, deepcopy
 def process_frame():
     global framesArray
     global currentFrame
-    global Minv
+    global invM
     global rectImg
 
     trapTopWidth = cv2.getTrackbarPos('Trap Top', 'TrackBars')
-    trapBotWidth = cv2.getTrackbarPos('Trap Ang', 'TrackBars')
+    trapAng = cv2.getTrackbarPos('Trap Ang', 'TrackBars')
     trapHeight = cv2.getTrackbarPos('Win Height', 'TrackBars')
     roiHeight = cv2.getTrackbarPos('ROI Height', 'TrackBars')
     roiWidth = cv2.getTrackbarPos('ROI Width', 'TrackBars')
-    horizOffset = cv2.getTrackbarPos('ROI Horiz', 'TrackBars')
-    vertOffset = cv2.getTrackbarPos('ROI Vert', 'TrackBars')
+    roiHoriz = cv2.getTrackbarPos('ROI Horiz', 'TrackBars')
+    roiVert = cv2.getTrackbarPos('ROI Vert', 'TrackBars')
     barOne = cv2.getTrackbarPos('Bar 1', 'TrackBars')
     barTwo = cv2.getTrackbarPos('Bar 2', 'TrackBars')
     showRect = cv2.getTrackbarPos('Show Rect', 'TrackBars')
@@ -27,36 +27,28 @@ def process_frame():
 
     currentFrame = framesArray[frameIndex]
     frameHeight, frameWidth, channels = currentFrame.shape
-    # print(currentFrame.shape)
 
-    # M, Minv = get_birds_eye_matrix(horizOffset, vertOffset, roiWidth, roiHeight, trapWidth, trapHeight, frameWidth=frameWidth, frameHeight=frameHeight)
-
-    reverseVOffset = frameHeight - vertOffset
-
-    # sets the coordinates of the roi box using the dimensions given from the sliders
-    # see: http://puu.sh/Gw9Hh/e3faefc50a.png for visual aid
-    #roiTopLeft = [horizOffset, vertOffset]
-    #roiTopRight = [horizOffset + roiWidth, vertOffset]
-    #roiBottomLeft = [horizOffset, vertOffset + roiHeight]
-    #roiBottomRight = [horizOffset + roiWidth, vertOffset + roiHeight]
-
-    roiTopLeft = [horizOffset, vertOffset - roiHeight]
-    roiTopRight = [horizOffset + roiWidth, vertOffset - roiHeight]
-    roiBottomLeft = [horizOffset, vertOffset]
-    roiBottomRight = [horizOffset + roiWidth, vertOffset]
-
+    # Calculating the corner points for the ROI (The area that is going to be transformed)
+    roiTopLeft = [roiHoriz, roiVert - roiHeight]
+    roiTopRight = [roiHoriz + roiWidth, roiVert - roiHeight]
+    roiBottomLeft = [roiHoriz, roiVert]
+    roiBottomRight = [roiHoriz + roiWidth, roiVert]
     roiPoints = np.float32([[roiTopLeft], [roiTopRight], [roiBottomLeft], [roiBottomRight]])
 
+    # Calculating the corner points for the trapezoid (The shape that the ROI will be transformed into)
     trapTopLeft = [0, 0]
     trapTopRight = [frameWidth, 0]
-    trapBottomLeft = [trapBotWidth, trapHeight]
-    trapBottomRight = [frameWidth - trapBotWidth, trapHeight]
-
+    trapBottomLeft = [trapAng, trapHeight]
+    trapBottomRight = [frameWidth - trapAng, trapHeight]
     trapezoidPoints = np.float32([trapTopLeft, trapTopRight, trapBottomLeft, trapBottomRight])
 
-    M = cv2.getPerspectiveTransform(roiPoints, trapezoidPoints)  # The transformation matrix
-    Minv = cv2.getPerspectiveTransform(trapezoidPoints, roiPoints)  # Inverse transformation
-    warpedImg = cv2.warpPerspective(currentFrame, M, (frameWidth, trapHeight))
+    # The transformation matrix
+    matrix = cv2.getPerspectiveTransform(roiPoints, trapezoidPoints)
+    # Inverse transformation
+    matrixInv = cv2.getPerspectiveTransform(trapezoidPoints, roiPoints)
+
+    # The resulting image after the matrix was applied to the ROI
+    warpedImg = cv2.warpPerspective(currentFrame, matrix, (frameWidth, trapHeight))
 
     # creating a copy of the current frame to add the roi visuals to avoid affecting the original frame
     rectImg = deepcopy(currentFrame)
@@ -75,19 +67,13 @@ def process_frame():
 
         cv2.line(warpedImg, (barTwo, 0), (barTwo, trapHeight), (0, 255, 0), 2)
         # 3M Warning Bars
-        cv2.line(warpedImg, (int(frameWidth/2 - 188.25), 0), (int(frameWidth/2 - 188.25), trapHeight), (0, 0, 255), 2)
-        cv2.line(warpedImg, (int(frameWidth/2 + 188.25), 0), (int(frameWidth/2 + 188.25), trapHeight), (0, 0, 255), 2)
 
-        threeMtrBarOneArr = np.array([[[int(frameWidth/2 - 188.25), 0], [int(frameWidth/2 - 188.25), trapHeight]]], np.float32)
-        threeMtrBarTwoArr = np.array([[[int(frameWidth/2 + 188.25), 0], [int(frameWidth/2 + 188.25), trapHeight]]], np.float32)
 
         barOneArr = np.array([[[barOne, 0], [barOne, trapHeight]]], np.float32)
         barTwoArr = np.array([[[barTwo, 0], [barTwo, trapHeight]]], np.float32)
 
-        b1m = cv2.perspectiveTransform(barOneArr, Minv)
-        b2m = cv2.perspectiveTransform(barTwoArr, Minv)
-        wb1m = cv2.perspectiveTransform(threeMtrBarOneArr, Minv)
-        wb2m = cv2.perspectiveTransform(threeMtrBarTwoArr, Minv)
+        b1m = cv2.perspectiveTransform(barOneArr, matrixInv)
+        b2m = cv2.perspectiveTransform(barTwoArr, matrixInv)
 
 
         cv2.line(rectImg, (b1m[0][0][0], b1m[0][0][1]), (b1m[0][1][0], b1m[0][1][1]),
@@ -96,17 +82,13 @@ def process_frame():
         cv2.line(rectImg, (b2m[0][0][0], b2m[0][0][1]), (b2m[0][1][0], b2m[0][1][1]),
                  (0, 255, 0), 2)
 
-        cv2.line(rectImg, (wb1m[0][0][0], wb1m[0][0][1]), (wb1m[0][1][0], wb1m[0][1][1]),
-                 (0, 0, 255), 2)
 
-        cv2.line(rectImg, (wb2m[0][0][0], wb2m[0][0][1]), (wb2m[0][1][0], wb2m[0][1][1]),
-                 (0, 0, 255), 2)
 
     scale = 0.7
     scaledDimRect = getScaledDim(frameWidth, frameHeight, scale)
     scaledDimWarped = getScaledDim(frameWidth, trapHeight, scale)
 
-    imgInverse = cv2.warpPerspective(warpedImg, Minv, (frameWidth, frameHeight))  # Inverse transformation
+    imgInverse = cv2.warpPerspective(warpedImg, matrixInv, (frameWidth, frameHeight))  # Inverse transformation
     scaledImgInverse = cv2.resize(imgInverse, scaledDimRect)
     scaledRectImg = cv2.resize(rectImg, scaledDimRect)
     scaledWarpedImg = cv2.resize(warpedImg, scaledDimWarped)
@@ -203,7 +185,7 @@ def onMouseBirdsEye(event, x, y, flags, param):
         # 100 = 70/0.7 divide the scaled by the scale to get the original
         p = np.array([[[x/scale, y/scale]]], np.float32)
         print('col = %d, row = %d' % (x, y))
-        m = cv2.perspectiveTransform(p, Minv)
+        m = cv2.perspectiveTransform(p, invM)
         print(m)
         #print('tCol = %d, tRow = %d' % (m[0], m[1]))
 
@@ -228,7 +210,7 @@ frameIndex = 0  # the index of the current frame from the stored frames
 success = True
 IMAGE_H = 550
 IMAGE_W = 1296
-Minv = 0
+invM = 0
 rectImg = 0
 
 cv2.namedWindow("TrackBars", cv2.WINDOW_AUTOSIZE)

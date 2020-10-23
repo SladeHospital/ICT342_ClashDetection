@@ -72,7 +72,7 @@ frameIndex = 0
 success = True
 
 cv2.namedWindow("TrackBars")
-cv2.resizeWindow("TrackBars", 640, 240)
+cv2.resizeWindow("TrackBars", 640, 300)
 cv2.createTrackbar("Hue Min", "TrackBars", 0, 179, trackbar_onChange)
 cv2.createTrackbar("Hue Max", "TrackBars", 179, 179, trackbar_onChange)
 cv2.createTrackbar("Sat Min", "TrackBars", 0, 255, trackbar_onChange)
@@ -89,8 +89,12 @@ while True:
         # cv2.waitKey waits for a keypress or its parameter in ms, whichever comes first
         # unless the parameter is 0, then it will wait for the keypress forever
         key = cv2.waitKeyEx(1)
+        #  0 179 0 37 0 103 looks promising
 
+        # Converts the image from BGR to HSV
         imgHSV = cv2.cvtColor(currentFrame, cv2.COLOR_BGR2HSV)
+
+        # Grabs the values from the track bars and uses them as the values for the ranges
         h_min = cv2.getTrackbarPos("Hue Min", "TrackBars")
         h_max = cv2.getTrackbarPos("Hue Max", "TrackBars")
         s_min = cv2.getTrackbarPos("Sat Min", "TrackBars")
@@ -98,17 +102,12 @@ while True:
         v_min = cv2.getTrackbarPos("Val Min", "TrackBars")
         v_max = cv2.getTrackbarPos("Val Max", "TrackBars")
 
-        #  0 179 0 37 0 103 looks promising
-        # print(h_min, h_max, s_min, s_max, v_min, v_max)
-        lower = np.array([h_min, s_min, v_min])
-        upper = np.array([h_max, s_max, v_max])
-        mask = cv2.inRange(imgHSV, lower, upper)
-        imgResult = cv2.bitwise_and(currentFrame, currentFrame, mask=mask)
+        lower = np.array([h_min, s_min, v_min])  # The lower values of the range
+        upper = np.array([h_max, s_max, v_max])  # The upper values of the range
+        mask = cv2.inRange(imgHSV, lower, upper)  # All pixels from the image that are within the range
 
-        # cv2.imshow("Original",img)
-        # cv2.imshow("HSV",imgHSV)
-        # cv2.imshow("Mask", mask)
-        # cv2.imshow("Result", imgResult)
+        # imgResult is the resulting image from removing all pixels outside the range
+        imgResult = cv2.bitwise_and(currentFrame, currentFrame, mask=mask)
 
         imgStack = stack_images(0.6, ([currentFrame, imgHSV], [mask, imgResult]))
         cv2.imshow(("dashcam_footage"), imgStack)
@@ -126,10 +125,6 @@ while True:
         # Quit when 'q' is pressed
         if key == ord('q'):
             break
-
-        # Quit when 'q' is pressed
-        if key == ord('i'):
-            print(648-649)
 
 
 cap.release()
